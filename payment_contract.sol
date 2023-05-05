@@ -9,9 +9,9 @@ contract GameLand_verify {
     receive() external payable {}
     
     address owner;
-    
+    ERC20 u;
     address governance;
-    address usdt;
+    address immutable usdt;
     address rev;
     uint baseprice;
     constructor(address _u, address _rev) {
@@ -20,9 +20,10 @@ contract GameLand_verify {
         usdt = _u;
         rev = _rev;
         baseprice = 2000000000000000000;
+        u = ERC20(_u);
     }
     mapping(uint256 => address_amount_info) address_info;
-    address[] address_sz;
+    address[] address_list;
     struct address_amount_info
     {
         address add;
@@ -43,8 +44,8 @@ contract GameLand_verify {
         uint256 zt = find_address(add);
         if(zt == 999999999)
         {
-            uint256 asl = address_sz.length;
-            address_sz.push(add);
+            uint256 asl = address_list.length;
+            address_list.push(add);
             
             address_info[asl].add = add;
             address_info[asl].price = amount;
@@ -63,8 +64,8 @@ contract GameLand_verify {
     }
 
     function find_address(address add) public view returns(uint256){
-        for(uint256 i=0;i<address_sz.length;i++){
-            if(address_sz[i] == add)
+        for(uint256 i=0;i<address_list.length;i++){
+            if(address_list[i] == add)
             {
                 return i;
             }
@@ -72,16 +73,17 @@ contract GameLand_verify {
         return 999999999;
     }
 
-    function batch_set_address_amount(uint256[] memory amounts, address[] memory adds) public onlyGove{
-        for(uint i =0; i<adds.length;i++)
+    function batch_set_address_amount(uint256[] calldata amounts, address[] calldata adds) public onlyGove{
+        require(amounts.length == adds.length, "The lengths of the two arrays must be equal");
+        for(uint256 i =0; i<adds.length;i++)
         {
             address add = adds[i];
             uint amount = amounts[i];
             uint256 zt = find_address(add);
             if(zt == 999999999)
             {
-                uint256 asl = address_sz.length;
-                address_sz.push(add);
+                uint256 asl = address_list.length;
+                address_list.push(add);
             
                 address_info[asl].add = add;
                 address_info[asl].price = amount;
@@ -97,6 +99,7 @@ contract GameLand_verify {
                 address_info[zt].price = amount;
             
             }
+            
         }
         
     }
@@ -105,7 +108,15 @@ contract GameLand_verify {
         baseprice = newbaseprice;
     }
 
-    function verify_address_amount(address mdd_address) public{
+    bool locked = false;
+    modifier reentrancyGuard {
+        require(!locked, "Reentrancy guard failed");
+        locked = true;
+        _;
+        locked = false;
+    }
+
+    function verify_address_amount(address mdd_address) public reentrancyGuard{
         uint256 re = erc20allowance(msg.sender,address(this));
         uint256 zt = find_address(mdd_address);
         if(zt != 999999999)
@@ -114,10 +125,10 @@ contract GameLand_verify {
             re >= address_info[zt].price,
             "Not enough amount"
             );
-        
+            re = address_info[zt].price;
             bool success = erc20transferFrom(msg.sender,address(this),re);
-            (success, "transfer error!");
-            uint256 fee = re / 100 * 20;
+            require(success, "transfer error!");
+            uint256 fee = re * 20  / 100;
             re = re - fee;
             bool success2 =  erc20transfer(mdd_address, re);
             require(success2, "transfer2 error!");
@@ -138,18 +149,18 @@ contract GameLand_verify {
             re >= baseprice,
             "Not enough amount"
             );
-        
+            re = baseprice;
             bool success = erc20transferFrom(msg.sender,address(this),re);
-            (success, "transfer error!");
-            uint256 fee = re / 100 * 20;
+            require(success, "transfer error!");
+            uint256 fee = re * 20  / 100;
             re = re - fee;
             bool success2 =  erc20transfer(mdd_address, re);
             require(success2, "transfer2 error!");
             bool success3 =  erc20transfer(rev, fee);
             require(success3, "transfer3 error!");
 
-            uint256 asl = address_sz.length;
-            address_sz.push(mdd_address);
+            uint256 asl = address_list.length;
+            address_list.push(mdd_address);
             address add = msg.sender;
             address_info[asl].add = mdd_address;
             address_info[asl].price = baseprice;
@@ -178,15 +189,15 @@ contract GameLand_verify {
             {
                 if(address_info[zt].vi[i].gm_address == add)
                 {
-                    return 1;
+                    return i;
                 }
             } 
         }
         return 999999999;
     }
 
-    function get_address_sz() public view returns(address[] memory){
-        return address_sz;
+    function get_address_list() public view returns(address[] memory){
+        return address_list;
     }
 
 
@@ -202,7 +213,10 @@ contract GameLand_verify {
     }
 
     function updateOwner(address _Owner) public onlyOwner{
-        owner = _Owner;
+        if(_Owner != address(0))
+        {
+            owner = _Owner;
+        }
     }
     
     function updategove(address _gove) public onlyOwner{
@@ -256,10 +270,9 @@ contract GameLand_verify {
         return success;
     }
 
-    function erc20allowance(address from, address to) public view returns (uint256 re) {
-        ERC20 u = ERC20(usdt);
-        re = u.allowance(from,to);
-        return re;
+    function erc20allowance(address from, address to) public view returns (uint256 result) {
+        result = u.allowance(from,to);
+        return result;
     }
 
 
@@ -267,7 +280,6 @@ contract GameLand_verify {
     
     // 获取合约账户余额 
     function erc20getBalance(address dz) public view returns (uint256) {
-        ERC20 u = ERC20(usdt);
         return u.balanceOf(dz);
     }
 }
